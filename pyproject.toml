@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sdsusleepdrowsiness"
+version = "0.0.1"
+description = "Logistics Regression Model built upon data translated via MediaPipe to return FaceBlends and determine if they show signs of drowsiness via blinking, yawning, etc. "
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Andy Thai", email = "andy.thai2004@gmail.com" }
+]
+# Your core libraries (The upgraded requirements.txt)
+dependencies = [
+]
+
+[project.optional-dependencies]
+# Extra libraries for developers or researchers
+dev = [
+    "pytest",
+    "ruff",   # The modern linter/formatter
+    "ipykernel", # To run this in Jupyter notebooks
+]
+train = [
+    "wandb",   # For experiment tracking
+    "tqdm",    # For progress bars
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/my_model_name"]
