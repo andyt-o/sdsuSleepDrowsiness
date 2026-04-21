@@ -13,6 +13,23 @@ authors = [
 ]
 # Your core libraries (The upgraded requirements.txt)
 dependencies = [
+    "polars[gpu]; sys_platform == 'linux'", 
+    "polars; sys_platform != 'linux'",
+    "numpy",
+    "pyarrow",
+    "scipy",
+    "scikit-learn",
+    "torch",
+    "torchvision",
+    "xgboost",
+    "imutils",
+    "av",
+    "pyttsx3",
+    "mlflow",
+    "tqdm",
+    "opencv-python",
+    "mediapipe",
+    "onnxruntime",
 ]
 
 [project.optional-dependencies]
