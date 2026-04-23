@@ -26,9 +26,9 @@ except Exception:
     print("Error: Cannot locate the parquet file.")
 
 PARAMS = {
-    "max-depth": 3,
+    "max_depth": 3,
     "eta": 0.05,
-    "objective": "binary-logistic",
+    "objective": "binary:logistic",
     "eval_metric": "auc",
     "device": DEVICE,
 }
@@ -41,11 +41,5 @@ else:
 
 
 def trainModel():
-    MODEL = xgb.train(
-        PARAMS, MAIN_DATA, num_boost_round=1000, early_stopping_rounds=100
-    )
+    MODEL = xgb.train(PARAMS, MAIN_DATA, num_boost_round=1000)
     MODEL.save_model(f"{saveLocation}.ubj")
-
-
-if __name__ == "__main__":
-    print(MAIN_DATA.num_row(), MAIN_DATA.num_col())
