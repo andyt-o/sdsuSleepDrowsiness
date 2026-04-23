@@ -96,9 +96,19 @@ class HuggingFace:
 
     def processData(self, data):
         X = SCHEMA.copy()
+        N = len(data["label"])
 
-        for i in X:
-            print(i)
+        for i in SCHEMA:
+            X[i] = [0 for _ in range(N)]
+
+        for i in range(N):
+            currImage = np.ascontiguousarray(np.array(data["image"][i]))
+            mpImage = mp.Image(image_format=mp.ImageFormat.SRGB, data=currImage)
+            res = self.landmarker.detect(mpImage)
+            X["label"][i] = data["label"][i]
+            for j in res.face_blendshapes[0]:
+                X[j.category_name][i] = j.score
+
         """
         for i in range(len(data["label"])):
             currImage = np.ascontiguousarray(np.array(data["image"][i]))
@@ -113,7 +123,7 @@ class HuggingFace:
                 X["label"] = [data["label"][i]]
             else:
                 X["label"].append(data["label"][i])
-        print("\n", X, "\n")"""
+        """
         return X
 
     def streamData(self, num: int, split: str = "train"):
@@ -124,7 +134,6 @@ class HuggingFace:
         if num == -1:
             x = load_dataset_builder(self.dataset)
             num = x.info.splits["train"].num_examples
-            num = 10
         self.localdata = self.localdata.shuffle(seed=5, buffer_size=100)
 
         try:
@@ -137,11 +146,22 @@ class HuggingFace:
             self.localdata = self.localdata[next(iter(self.localdata.keys()))]
 
         processedData = self.localdata.map(
-            self.processData, batched=True, batch_size=10
+            self.processData,
+            batched=True,
+            batch_size=1000,
+            remove_columns=["image", "label"],
         )
 
-        for sample in processedData.take(5):
-            print(sample)
+        _num = num
+        for sample in processedData.take(num):
+            _num -= 1
+            print(f"Loading... {_num} remaining.")
+            self.DATAFRAME = self.DATAFRAME.vstack(pl.from_dict(sample, schema=SCHEMA))
+
+        self.DATAFRAME.unique()
+        self.DATAFRAME.rechunk()
+        self.DATAFRAME.write_csv(dataPath / f"csvOutput_{dataName}")
+        self.DATAFRAME.write_parquet(dataPath / f"parquetOutput_{dataName}")
 
 
 def createDataset(platform: str, dataset: str, streaming=False, num=1):
