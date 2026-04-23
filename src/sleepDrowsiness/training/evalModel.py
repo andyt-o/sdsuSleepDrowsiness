@@ -27,6 +27,8 @@ class evalModel:
         self.MODEL = self.loadModel(self.findModel())
         self.DATASET = self.loadDataset(dataset)["train"]
         self.inputData = SCHEMA
+        self.inputData.pop("label")
+        print(self.inputData)
         self.testData()
 
     def loadDataset(self, dataset: str):
@@ -37,7 +39,8 @@ class evalModel:
     def findModel(self):
         modelPath = Path("src/sleepDrowsiness/models")
         files = [f for f in modelPath.glob("*") if f.is_file()]
-        newestModel = max(files, key=lambda f: f.stat().st_ctime)
+        newestModel = max(files, key=lambda f: f.stat().st_birthtime)
+        print("Model being used is: ", newestModel)
         return newestModel
 
     def loadModel(self, model):
@@ -46,17 +49,29 @@ class evalModel:
         return x
 
     def testData(self):
+        x = 0
+        accuracy = 0
         for i in self.DATASET:
+            x += 1
             currImage = np.ascontiguousarray(np.array(i["image"]))
             cv2Image = cv2.cvtColor(currImage, cv2.COLOR_RGB2BGR)
             mpImage = mp.Image(image_format=mp.ImageFormat.SRGB, data=currImage)
 
             res = landmarker.detect(mpImage).face_blendshapes
-
             if len(res) > 0:
-                for i in res[0]:
-                    self.inputData[i.category_name] = i.score
-                print(self.inputData)
+                for j in res[0]:
+                    self.inputData[j.category_name] = j.score
+
+            modelOutput = self.MODEL.predict(
+                xgb.DMatrix(pl.DataFrame(data=self.inputData))
+            )
+
+            if (0 if modelOutput < 0.5 else 1) == i["label"]:
+                accuracy += 1
+
+            print(
+                f"Model suggests that Image {x} is {modelOutput}, {self.DATASET.features['label'].int2str(0 if modelOutput < 0.5 else 1)}\nCurrent Accuracy is {accuracy / x}"
+            )
 
             cv2.putText(
                 cv2Image,
@@ -65,6 +80,16 @@ class evalModel:
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.425,
                 (0, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                cv2Image,
+                f"Model: {self.DATASET.features['label'].int2str(0 if modelOutput < 0.5 else 1)}",
+                (5, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.425,
+                (255, 255, 255),
                 1,
                 cv2.LINE_AA,
             )
@@ -81,6 +106,9 @@ class evalModel:
 
 def evaluateModel():
     testFile = evalModel("akahana/Driver-Drowsiness-Dataset")
+    # akahana/Driver-Drowsiness-Dataset 60% accuracy
+    # n7i5x9/driver-drowsiness-dataset 77% accuracy
+    # c3rl/yawning-people 44% accuracy
 
 
 if __name__ == "__main__":
