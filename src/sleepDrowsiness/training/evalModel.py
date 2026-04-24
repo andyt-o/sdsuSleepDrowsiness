@@ -12,18 +12,20 @@ import os
 load_dotenv()
 HUGGING_FACE = os.getenv("HUGGING_FACE")
 
-options = mp.tasks.vision.FaceLandmarkerOptions(
-    base_options=mp.tasks.BaseOptions(model_asset_path="./face_landmarker.task"),
-    output_face_blendshapes=True,
-    running_mode=mp.tasks.vision.RunningMode.IMAGE,
-    num_faces=1,
-    min_face_detection_confidence=0.2,
-)
-landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(options)
-
 
 class evalModel:
     def __init__(self, dataset):
+        options = mp.tasks.vision.FaceLandmarkerOptions(
+            base_options=mp.tasks.BaseOptions(
+                model_asset_path="./face_landmarker.task"
+            ),
+            output_face_blendshapes=True,
+            running_mode=mp.tasks.vision.RunningMode.IMAGE,
+            num_faces=1,
+            min_face_detection_confidence=0.2,
+        )
+        self.landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(options)
+
         self.MODEL = self.loadModel(self.findModel())
         self.DATASET = self.loadDataset(dataset)["train"]
         self.inputData = SCHEMA
@@ -57,7 +59,7 @@ class evalModel:
             cv2Image = cv2.cvtColor(currImage, cv2.COLOR_RGB2BGR)
             mpImage = mp.Image(image_format=mp.ImageFormat.SRGB, data=currImage)
 
-            res = landmarker.detect(mpImage).face_blendshapes
+            res = self.landmarker.detect(mpImage).face_blendshapes
             if len(res) > 0:
                 for j in res[0]:
                     self.inputData[j.category_name] = j.score
@@ -109,6 +111,11 @@ def evaluateModel():
     # akahana/Driver-Drowsiness-Dataset 60% accuracy
     # n7i5x9/driver-drowsiness-dataset 77% accuracy
     # c3rl/yawning-people 44% accuracy
+
+    # Using akahana as training for the model
+    # akahana/Driver-Drowsiness-Dataset 97% accuracy
+    # n7i5x9/driver-drowsiness-dataset 60% accuracy
+    # c3rl/yawning-people 52% accuracy
 
 
 if __name__ == "__main__":

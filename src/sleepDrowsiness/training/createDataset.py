@@ -10,11 +10,12 @@ import os
 
 load_dotenv()
 HUGGING_FACE = os.getenv("HUGGING_FACE")
+os.environ["HF_TOKEN"] = HUGGING_FACE
 
 dataPath = (
-    Path("src/sleepDrowsiness/data")
+    Path(r"src/sleepDrowsiness/data")
     if os.name == "posix"
-    else Path("src\sleepDrowsiness\data")
+    else Path(r"src\sleepDrowsiness\data")
 )
 dataName = dt.datetime.now().strftime("%H_%M_%m_%d_%Y")
 
@@ -93,10 +94,13 @@ class HuggingFace:
         self.localdata: DatasetDict = None
         self.DATAFRAME = pl.DataFrame(schema=SCHEMA)
         self.landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(options)
+        self.counter = 0
 
     def processData(self, data):
         X = SCHEMA.copy()
         N = len(data["label"])
+        self.counter += N
+        print(N)
 
         for i in SCHEMA:
             X[i] = [0 for _ in range(N)]
@@ -105,9 +109,10 @@ class HuggingFace:
             currImage = np.ascontiguousarray(np.array(data["image"][i]))
             mpImage = mp.Image(image_format=mp.ImageFormat.SRGB, data=currImage)
             res = self.landmarker.detect(mpImage)
-            X["label"][i] = data["label"][i]
-            for j in res.face_blendshapes[0]:
-                X[j.category_name][i] = j.score
+            if len(res.face_blendshapes) > 0:
+                X["label"][i] = data["label"][i]
+                for j in res.face_blendshapes[0]:
+                    X[j.category_name][i] = j.score
 
         """
         for i in range(len(data["label"])):
@@ -152,16 +157,31 @@ class HuggingFace:
             remove_columns=["image", "label"],
         )
 
-        _num = num
         for sample in processedData.take(num):
-            _num -= 1
-            print(f"Loading... {_num} remaining.")
             self.DATAFRAME = self.DATAFRAME.vstack(pl.from_dict(sample, schema=SCHEMA))
 
         self.DATAFRAME.unique()
         self.DATAFRAME.rechunk()
         self.DATAFRAME.write_csv(dataPath / f"csvOutput_{dataName}")
         self.DATAFRAME.write_parquet(dataPath / f"parquetOutput_{dataName}")
+
+    def createFromDirectory(self, dir: Path):
+        self.localdata = load_dataset("imagefolder", data_dir=dir)
+        X = SCHEMA.copy()
+
+        for i in self.localdata["train"]:
+            currImage = np.ascontiguousarray(np.array(i["image"]))
+            mpImage = mp.Image(image_format=mp.ImageFormat.SRGB, data=currImage)
+            res = self.landmarker.detect(mpImage)
+            if len(res.face_blendshapes) > 0:
+                for j in res.face_blendshapes[0]:
+                    X[j.category_name] = j.score
+                X["label"] = i["label"]
+                self.DATAFRAME = self.DATAFRAME.vstack(pl.from_dict(X, schema=SCHEMA))
+
+        self.DATAFRAME.unique()
+        self.DATAFRAME.rechunk()
+        self.DATAFRAME.write_parquet(dataPath / f"testParquet_{dataName}")
 
 
 def createDataset(platform: str, dataset: str, streaming=False, num=1):
@@ -173,6 +193,12 @@ def createDataset(platform: str, dataset: str, streaming=False, num=1):
         if streaming:
             print("Streaming Data")
             HF_DATASET.streamData(num)
+    elif platform == 1:
+        HF_DATASET = HuggingFace(dataset, os.name, False)
+        if os.name == "nt":
+            HF_DATASET.createFromDirectory(Path(r".\data"))
+        else:
+            HF_DATASET.createFromDirectory(Path("./data"))
 
         """currImage = np.ascontiguousarray(np.array(i["image"]))
         mpImage = mp.Image(image_format=mp.ImageFormat.SRGB, data=currImage)
