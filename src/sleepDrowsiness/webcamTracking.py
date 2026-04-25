@@ -5,6 +5,7 @@ import numpy as np
 import polars as pl
 import xgboost as xgb
 import time
+from src.sleepDrowsiness.training.createDataset import SCHEMA
 
 
 class setupModel:
@@ -19,11 +20,14 @@ class setupModel:
             num_faces=1,
             result_callback=self.handleCallback,
         )
-        self.MODEL = xgb.Booster().load_model((Path(modelName)))
+        self.MODEL = xgb.Booster()
+        self.MODEL.load_model(Path(modelName))
         self.FPS = webcamFPS
         self.WIDTH, self.HEIGHT = webcamDims
         self.LANDMARKER = mp.tasks.vision.FaceLandmarker.create_from_options(OPTIONS)
         self.RES = None
+        self.LOCALDATA = SCHEMA.copy()
+        self.LOCALDATA.pop("label")
         self.createWebcam()
 
     def createWebcam(self):
@@ -48,8 +52,28 @@ class setupModel:
                 data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
             )
             self.LANDMARKER.detect_async(mpImage, timestamp)
-            print(self.RES.face_blendshapes)
+            modelOutput = "Can't Detect Face"
+            Ans = None
+            if self.RES is not None:
+                y = self.RES.face_blendshapes
+                if len(y) > 0:
+                    for i in y[0]:
+                        self.LOCALDATA[i.category_name] = i.score
+                    modelOutput = self.MODEL.predict(
+                        xgb.DMatrix(pl.DataFrame(data=self.LOCALDATA))
+                    )
 
+                    Ans = "Drowsy" if modelOutput < 0.5 else "Awake"
+            cv2.putText(
+                frame,
+                f"{Ans}, {str(modelOutput)}",
+                (25, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (255, 255, 120),
+                3,
+                cv2.LINE_AA,
+            )
             cv2.imshow("Sleep Drowsiness", frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -59,7 +83,7 @@ class setupModel:
 
     def findCameras(self):
         availableCameras = []
-        for i in range(25):
+        for i in range(5):
             cap = cv2.VideoCapture(i)
             if cap.isOpened():
                 availableCameras.append(i)
