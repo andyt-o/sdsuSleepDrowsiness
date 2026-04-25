@@ -17,9 +17,9 @@ from src.sleepDrowsiness.training.createDataset import SCHEMA
 
 
 CAMERA_INDEX = 0
-DEFAULT_REFRESH_MS = 10
 DROWSY_THRESHOLD = 0.5
 MAX_ALERT_LEVEL = 100.0
+MIN_REFRESH_MS = 1
 SUPPORTED_VIDEO_TYPES = (
     ("Video files", "*.mp4 *.mov *.avi *.mkv *.wmv *.m4v"),
     ("MP4 files", "*.mp4"),
@@ -115,6 +115,7 @@ class DrowsinessApp:
         self.tracker = tracker
         self.cap: cv2.VideoCapture | None = None
         self.camera_indexes = self.find_cameras()
+        self.frame_interval_ms = max(1, round(1000 / self.tracker.fps))
         self.alert_level = 0.0
         self.drowsy_started_at: float | None = None
         self.last_progress_update = time.monotonic()
@@ -366,6 +367,7 @@ class DrowsinessApp:
         if not self._running:
             return
 
+        frame_started_at = time.perf_counter()
         if self.cap is None or not self.cap.isOpened():
             self.root.after(250, self._update_frame)
             return
@@ -393,17 +395,25 @@ class DrowsinessApp:
         self._update_alert_level(state)
         self._show_frame(frame)
 
-        self.root.after(DEFAULT_REFRESH_MS, self._update_frame)
+        self._schedule_next_frame(frame_started_at)
 
     def _show_frame(self, frame: np.ndarray) -> None:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        success, encoded = cv2.imencode(".ppm", rgb_frame)
-        if not success:
-            return
+        ppm_header = f"P6\n{self.tracker.width} {self.tracker.height}\n255\n".encode(
+            "ascii"
+        )
 
-        self._photo = tk.PhotoImage(data=encoded.tobytes(), format="PPM")
+        self._photo = tk.PhotoImage(
+            data=ppm_header + rgb_frame.tobytes(),
+            format="PPM",
+        )
         if self.video_label is not None:
             self.video_label.configure(image=self._photo)
+
+    def _schedule_next_frame(self, frame_started_at: float) -> None:
+        elapsed_ms = round((time.perf_counter() - frame_started_at) * 1000)
+        delay_ms = max(MIN_REFRESH_MS, self.frame_interval_ms - elapsed_ms)
+        self.root.after(delay_ms, self._update_frame)
 
     def _show_status(self, state: TrackingState) -> None:
         self.status_text.set(state.label)
